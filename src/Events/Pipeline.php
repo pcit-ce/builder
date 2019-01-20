@@ -177,8 +177,8 @@ class Pipeline
             return [$pipelineContent];
         }
 
-        // 内容为数组
-        foreach (array_keys($pipelineContent) as $key => $value) {
+        // 判断内容是否为数组
+        foreach (array_keys((array) $pipelineContent) as $key => $value) {
             if (\is_int($value)) {
                 return $pipelineContent;
             }
