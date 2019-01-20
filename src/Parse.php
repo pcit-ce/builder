@@ -51,14 +51,14 @@ class Parse
      * @param string $text
      * @param        $env  <pre> ['K=V','K2=V2'] <pre>
      *
-     * @return bool|string
+     * @return string
      */
     public static function text(string $text, $env)
     {
         $pregResult = preg_match_all('/\${[0-9a-zA-Z_-]*\}/', $text, $array);
 
         if (!$pregResult) {
-            return false;
+            return $text;
         }
 
         $result = &$text;

@@ -69,10 +69,6 @@ class Pipeline
         // ${} 变量替换
         $result = Parse::text($text, $env);
 
-        if (!$result) {
-            return ['image' => null, 'env' => []];
-        }
-
         $settings = json_decode($result, true);
 
         $provider = $settings['provider'] ?? null;
@@ -149,6 +145,30 @@ class Pipeline
     }
 
     /**
+     * 整合 pipelineEnv systemEnv matrixEnv.
+     *
+     * @param $pipelineEnv
+     *
+     * @return array
+     */
+    public function handleEnv($pipelineEnv)
+    {
+        $preEnv = array_merge($pipelineEnv, $this->client->system_env);
+
+        if (!$this->matrix_config) {
+            return $preEnv;
+        }
+
+        $matrixEnv = [];
+
+        foreach ($this->matrix_config as $k => $v) {
+            $matrixEnv[] = $k.'='.$v;
+        }
+
+        return array_merge($preEnv, $matrixEnv);
+    }
+
+    /**
      * @throws Exception
      */
     public function handle(): void
@@ -172,7 +192,8 @@ class Pipeline
             $settings = $array->settings ?? new \stdClass();
             $settings = (array) $settings;
 
-            $preEnv = array_merge($env, $this->client->system_env);
+            // 预处理 env
+            $preEnv = $this->handleEnv($env);
 
             // 处理官方插件
             if ($settings) {
