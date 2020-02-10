@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace PCIT\Builder\Tests\Conditional;
+namespace PCIT\Runner\Tests\Conditional;
 
-use PCIT\Builder\Conditional\Matrix;
-use PCIT\Tests\PCITTestCase;
+use PCIT\Runner\Conditional\Matrix;
 use Symfony\Component\Yaml\Yaml;
+use Tests\TestCase;
 
-class MatrixTest extends PCITTestCase
+class MatrixTest extends TestCase
 {
     public function test(): void
     {
         $conditional_yaml = <<<EOF
 when:
   matrix:
-    - PHP_VERSION: 7.2.16
+    - PHP_VERSION: 7.4.2
       NGINX_VERSION: 1.15.9
       REDIS_VERSION: 5.0.3
       MYSQL_VERSION: 5.7.23
@@ -24,7 +24,7 @@ EOF;
         $current_yaml = <<<EOF
 matrix:
   PHP_VERSION:
-    - 7.2.16
+    - 7.4.2
   NGINX_VERSION:
     - 1.15.9
   REDIS_VERSION:
@@ -37,7 +37,7 @@ EOF;
 
         $current = Yaml::parse($current_yaml);
         $current = $current['matrix'];
-        $current = \PCIT\Builder\Events\Matrix::parseMatrix($current);
+        $current = \PCIT\Runner\Events\Matrix::parseMatrix($current);
 
         $result = (new Matrix($conditional, $current[0]))->handle();
 

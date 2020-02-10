@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace PCIT\Builder\Events;
+namespace PCIT\Runner\Events;
 
-use PCIT\Support\DB;
+use PCIT\Framework\Support\DB;
 
 /**
  * 获取服务的默认配置.
@@ -26,8 +26,6 @@ class ServiceDefault
     }
 
     /**
-     * @param string $type
-     *
      * @return string|array|null
      *
      * @throws \Exception

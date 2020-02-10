@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace PCIT\Builder\Events;
+namespace PCIT\Runner\Events;
 
 use PCIT\Support\CacheKey;
 
@@ -15,7 +15,6 @@ class Notifications
     /**
      * Notification constructor.
      *
-     * @param int   $build_key_id
      * @param mixed $notifications
      */
     public function __construct(int $build_key_id, $notifications = null)
@@ -37,7 +36,7 @@ class Notifications
             return;
         }
 
-        \PCIT\Support\Cache::store()
+        \Cache::store()
             ->hSet(
                 CacheKey::notificationsHashKey($this->build_key_id),
                 'email',

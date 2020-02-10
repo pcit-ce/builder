@@ -2,9 +2,7 @@
 
 declare(strict_types=1);
 
-namespace PCIT\Builder\Conditional;
-
-use PCIT\Support\Log;
+namespace PCIT\Runner\Conditional;
 
 abstract class Kernel
 {
@@ -38,7 +36,7 @@ abstract class Kernel
         }
 
         if (false === ($result ?? false)) {
-            Log::connect()->emergency(static::class.' conditional not match, skip');
+            \Log::emergency(static::class.' conditional not match, skip');
         }
 
         return $result ?? false;
@@ -64,7 +62,7 @@ abstract class Kernel
         }
 
         if (false === ($result ?? false)) {
-            Log::connect()->emergency(static::class.' conditional not match, skip');
+            \Log::emergency(static::class.' conditional not match, skip');
         }
 
         return $result ?? false;

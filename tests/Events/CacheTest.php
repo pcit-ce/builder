@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace PCIT\Builder\Tests\Events;
+namespace PCIT\Runner\Tests\Events;
 
-use PCIT\Builder\Events\Cache;
+use PCIT\Framework\Support\DB;
+use PCIT\Runner\Events\Cache;
 use PCIT\Support\CacheKey;
-use PCIT\Support\DB;
-use PCIT\Tests\PCITTestCase;
 use Symfony\Component\Yaml\Yaml;
+use Tests\TestCase;
 
-class CacheTest extends PCITTestCase
+class CacheTest extends TestCase
 {
     public $yaml;
 
@@ -35,13 +35,13 @@ class CacheTest extends PCITTestCase
 
         $cache->handle();
 
-        $this->cache = \PCIT\Support\Cache::store()->get(CacheKey::cacheKey(1));
+        $this->cache = \Cache::store()->get(CacheKey::cacheKey(1));
     }
 
     /**
      * @throws \Exception
      */
-    public function test_array(): void
+    public function test_single_array(): void
     {
         DB::close();
 
@@ -54,7 +54,27 @@ EOF;
 
         $this->common();
 
-        $this->assertEquals('PCIT_S3_CACHE=["dir"]', json_decode($this->cache)->Env[6]);
+        $this->assertEquals('INPUT_CACHE=dir', json_decode($this->cache)->Env[6]);
+    }
+
+    /**
+     * @throws \Exception
+     */
+    public function test_array(): void
+    {
+        DB::close();
+
+        $yaml = <<<'EOF'
+cache:
+  - dir
+  - dir2
+EOF;
+
+        $this->yaml = $yaml;
+
+        $this->common();
+
+        $this->assertEquals('INPUT_CACHE=dir,dir2', json_decode($this->cache)->Env[6]);
     }
 
     /**
@@ -72,6 +92,6 @@ EOF;
 
         $this->common();
 
-        $this->assertEquals('PCIT_S3_CACHE=["dir"]', json_decode($this->cache)->Env[6]);
+        $this->assertEquals('INPUT_CACHE=dir', json_decode($this->cache)->Env[6]);
     }
 }

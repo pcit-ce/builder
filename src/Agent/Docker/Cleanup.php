@@ -2,12 +2,11 @@
 
 declare(strict_types=1);
 
-namespace PCIT\Builder\Agent;
+namespace PCIT\Runner\Agent\Docker;
 
 use Docker\Container\Client as Container;
 use Exception;
 use PCIT\PCIT;
-use PCIT\Support\Log;
 
 class Cleanup
 {
@@ -15,7 +14,6 @@ class Cleanup
      * Remove all Docker Resource.
      *
      * @param string $id           services => only cleanup services
-     * @param bool   $last
      * @param bool   $service_only only cleanup service container
      *
      * @throws Exception
@@ -60,21 +58,19 @@ class Cleanup
             // clean volume
 
             $docker_volume->remove('pcit_'.$id);
+            $docker_volume->remove('pcit_actions_'.$id);
 
-            Log::connect()->emergency('Build Stopped Delete Volume '.$id);
+            \Log::emergency('Build Stopped Delete Volume '.$id);
 
             // clean network
 
             $docker_network->remove('pcit_'.$id);
 
-            Log::connect()->emergency('Build Stopped Delete Network '.$id);
+            \Log::emergency('Build Stopped Delete Network '.$id);
         }
     }
 
     /**
-     * @param Container $container
-     * @param string    $label
-     *
      * @throws Exception
      */
     private static function deleteContainerByLabel(Container $container, string $label): void
@@ -88,7 +84,7 @@ class Cleanup
                 continue;
             }
 
-            Log::connect()->emergency('Delete Container '.$id);
+            \Log::emergency('Delete Container '.$id);
 
             $container->remove($id, true, true);
         }

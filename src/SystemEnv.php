@@ -2,9 +2,7 @@
 
 declare(strict_types=1);
 
-namespace PCIT\Builder;
-
-use PCIT\Support\Log;
+namespace PCIT\Runner;
 
 class SystemEnv
 {
@@ -38,6 +36,8 @@ class SystemEnv
             'PCIT_EVENT_TYPE='.$this->build->event_type,
             'PCIT_PULL_REQUEST=false',
             'PCIT_REPO_SLUG='.$this->build->repo_full_name,
+
+            // 'PCIT_REF'
         ];
 
         if ($this->build->pull_request_number) {
@@ -52,7 +52,7 @@ class SystemEnv
 
         $system_env = array_merge($system_env, $this->client->system_env);
 
-        Log::debug(__FILE__, __LINE__, json_encode($system_env), [], Log::EMERGENCY);
+        \Log::emergency(json_encode($system_env), []);
 
         $this->env = $system_env;
 

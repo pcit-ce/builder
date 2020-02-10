@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace PCIT\Builder\Tests\Conditional;
+namespace PCIT\Runner\Tests\Conditional;
 
-use PCIT\Builder\Conditional\Tag;
-use PCIT\Tests\PCITTestCase;
+use PCIT\Runner\Conditional\Tag;
+use Tests\TestCase;
 
-class TagTest extends PCITTestCase
+class TagTest extends TestCase
 {
     /**
      * @throws \Exception

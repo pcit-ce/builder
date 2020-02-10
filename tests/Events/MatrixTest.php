@@ -2,33 +2,36 @@
 
 declare(strict_types=1);
 
-namespace PCIT\Builder\Tests\Events;
+namespace PCIT\Runner\Tests\Events;
 
-use PCIT\Builder\Events\Matrix;
-use PCIT\Tests\PCITTestCase;
+use PCIT\Runner\Events\Matrix;
 use Symfony\Component\Yaml\Yaml;
+use Tests\TestCase;
 
-class MatrixTest extends PCITTestCase
+class MatrixTest extends TestCase
 {
     public function test_parseMatrix(): void
     {
         $yaml = <<<EOF
 matrix:
   PHP_VERSION:
-    - 7.2.16
+    - 7.4.2
     - 7.1.27
   REDIS_VERSION:
     - 5.0.3
-
+  MYSQL_VERSION:
+    - 8.0.19
 EOF;
 
         $yaml2 = <<<EOF
 matrix:
   include:
-    - PHP_VERSION: 7.2.16
+    - PHP_VERSION: 7.4.2
       REDIS_VERSION: 5.0.3
+      MYSQL_VERSION: 8.0.19
     - PHP_VERSION: 7.1.27
       REDIS_VERSION: 5.0.3
+      MYSQL_VERSION: 8.0.19
 EOF;
 
         $result1 = Yaml::parse($yaml);

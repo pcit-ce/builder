@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace PCIT\Builder\Events;
+namespace PCIT\Runner\Events;
 
 use Docker\Container\Client as DockerContainer;
+use PCIT\Framework\Support\Env;
 use PCIT\PCIT;
 use PCIT\Support\CacheKey;
-use PCIT\Support\Env;
 
 class Cache
 {
@@ -28,10 +28,7 @@ class Cache
     /**
      * Cache constructor.
      *
-     * @param int    $jobId
-     * @param int    $build_key_id
-     * @param string $workdir
-     * @param mixed  $cache
+     * @param mixed $cache
      */
     public function __construct(int $jobId,
                                 int $build_key_id,
@@ -76,7 +73,7 @@ class Cache
 
         $cacheList = \is_string($cacheList) ? [$cacheList] : $cacheList;
 
-        if (!\is_array($cachesDir)) {
+        if (!\is_array($cacheList)) {
             return;
         }
 
@@ -85,20 +82,20 @@ class Cache
         $prefix = $this->getPrefix();
 
         $env = [
-            'PCIT_S3_ENDPOINT='.env('CI_S3_ENDPOINT'),
-            'PCIT_S3_ACCESS_KEY_ID='.env('CI_S3_ACCESS_KEY_ID'),
-            'PCIT_S3_SECRET_ACCESS_KEY='.env('CI_S3_SECRET_ACCESS_KEY'),
-            'PCIT_S3_BUCKET='.env('', 'pcit'),
-            'PCIT_S3_REGION='.env('', 'us-east-1'),
-            'PCIT_S3_CACHE_PREFIX='.$prefix,
-            'PCIT_S3_CACHE='.json_encode($cacheList),
-            'PCIT_S3_USE_PATH_STYLE_ENDPOINT='.
+            'INPUT_ENDPOINT='.env('CI_S3_ENDPOINT'),
+            'INPUT_ACCESS_KEY_ID='.env('CI_S3_ACCESS_KEY_ID'),
+            'INPUT_SECRET_ACCESS_KEY='.env('CI_S3_SECRET_ACCESS_KEY'),
+            'INPUT_BUCKET='.env('', 'pcit'),
+            'INPUT_REGION='.env('', 'us-east-1'),
+            'INPUT_CACHE_PREFIX='.$prefix,
+            'INPUT_CACHE='.(new EnvHandler())->arrayHandler($cacheList),
+            'INPUT_USE_PATH_STYLE_ENDPOINT='.
             (env('CI_S3_USE_PATH_STYLE_ENDPOINT', true) ? 'true' : 'false'),
             // must latest key
-            'PCIT_S3_CACHE_DOWNLOAD=true',
+            'INPUT_CACHE_DOWNLOAD=true',
         ];
 
-        \PCIT\Support\Cache::store()
+        \Cache::store()
             ->set(CacheKey::cacheKey($this->jobId, 'download'),
                 $this->getContainerConfig($dockerContainer, $env)
             );
@@ -109,15 +106,14 @@ class Cache
             return;
         }
 
-        \PCIT\Support\Cache::store()
+        \Cache::store()
             ->set(CacheKey::cacheKey($this->jobId, 'upload'),
                 $this->getContainerConfig($dockerContainer, $env)
             );
     }
 
     /**
-     * @param DockerContainer $dockerContainer
-     * @param                 $env
+     * @param $env
      *
      * @return mixed
      *

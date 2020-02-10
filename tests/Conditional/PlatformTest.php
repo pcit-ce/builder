@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace PCIT\Builder\Tests\Conditional;
+namespace PCIT\Runner\Tests\Conditional;
 
-use PCIT\Builder\Conditional\Platform;
-use PCIT\Tests\PCITTestCase;
+use PCIT\Runner\Conditional\Platform;
+use Tests\TestCase;
 
-class PlatformTest extends PCITTestCase
+class PlatformTest extends TestCase
 {
     /**
      * @throws \Exception

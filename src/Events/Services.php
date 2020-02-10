@@ -2,13 +2,12 @@
 
 declare(strict_types=1);
 
-namespace PCIT\Builder\Events;
+namespace PCIT\Runner\Events;
 
 use Docker\Container\Client;
 use Exception;
-use PCIT\Builder\Parse;
 use PCIT\PCIT;
-use PCIT\Support\Cache;
+use PCIT\Runner\Parser\TextHandler as TextParser;
 use PCIT\Support\CacheKey;
 
 class Services
@@ -51,7 +50,7 @@ class Services
                 $entrypoint = $serviceContent->entrypoint ?? $entrypoint;
                 $commands = $serviceContent->commands ?? $serviceContent->command ?? $commands;
 
-                $image = Parse::image($image, $this->matrix_config);
+                $image = (new TextParser())->handle($image, $this->matrix_config);
             }
 
             /**
@@ -81,7 +80,7 @@ class Services
                 ->setCreateJson(null)
                 ->getCreateJson();
 
-            Cache::store()->hset(CacheKey::serviceHashKey($this->job_id), $service_name, $container_config);
+            \Cache::store()->hset(CacheKey::serviceHashKey($this->job_id), $service_name, $container_config);
         }
     }
 }
