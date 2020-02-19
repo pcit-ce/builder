@@ -176,6 +176,14 @@ class Pipeline
         $jobId = $this->client->job_id;
         $workdir = $this->client->workdir;
         $language = $this->client->language ?? 'php';
+        $hosts = $this->client->networks->hosts ?? [];
+
+        // custome github.com hosts
+        if (env('CI_GITHUB_HOST')) {
+            $hosts = array_merge($hosts,
+            ['github.com:'.env('CI_GITHUB_HOST')]
+           );
+        }
 
         $this->language = $language;
 
@@ -241,21 +249,26 @@ class Pipeline
 
             \Log::info(json_encode($env), []);
 
+            $timeout = env('CI_STEP_TIMEOUT', 21600);
+
             if ('bash' === $shell || 'sh' === $shell) {
-                $cmd = $commands ? ['echo $CI_SCRIPT | base64 -d | '.$shell.' -e'] : null;
-                // 有 commands 指令则改为 ['/bin/sh', '-c'], 否则为默认值
-                $entrypoint = $commands ? ['/bin/sh', '-c'] : null;
+                $cmd = $commands ? ['echo $CI_SCRIPT | base64 -d | timeout '.$timeout.' '.$shell.' -e'] : null;
             }
 
             if ('python' === $shell) {
-                $cmd = $commands ? ['echo $CI_SCRIPT | base64 -d | python'] : null;
-                $entrypoint = $commands ? ['/bin/sh', '-c'] : null;
+                $cmd = $commands ? ['echo $CI_SCRIPT | base64 -d | timeout '.$timeout.' python'] : null;
             }
 
             if ('pwsh' === $shell) {
-                $cmd = $commands ? ['$CI_SCRIPT | base64 -d | pwsh -Command -'] : null;
-                $entrypoint = $commands ? ['pwsh', '-Command'] : null;
+                $cmd = $commands ? ['echo $CI_SCRIPT | base64 -d | timeout '.$timeout.' pwsh -Command -'] : null;
             }
+
+            if ('node' === $shell) {
+                $cmd = $commands ? ['echo $CI_SCRIPT | base64 -d | timeout '.$timeout.' node -'] : null;
+            }
+
+            // 有 commands 指令则改为 ['/bin/sh', '-c'], 否则为默认值
+            $entrypoint = $commands ? ['/bin/sh', '-c'] : null;
 
             $container_config = $docker_container
                 ->setEnv($env)
@@ -275,9 +288,11 @@ class Pipeline
                     'com.khs1994.ci.pipeline.status.changed' => (string) $changed,
                     'com.khs1994.ci' => (string) $jobId,
                 ])
+                ->setPrivileged($privileged)
                 ->setWorkingDir($workdir)
                 ->setCmd($cmd)
                 ->setImage($image)
+                ->setExtraHosts($hosts)
                 ->setNetworkingConfig([
                     'EndpointsConfig' => [
                         "pcit_$jobId" => [
@@ -339,10 +354,29 @@ class Pipeline
     {
         $actions = substr($image, 9);
 
-        [$repo,$ref] = explode('@', $actions);
+        // user/repo@ref
+        // user/repo/path@ref
+        $explode_array = explode('@', $actions);
+        [$repo,] = $explode_array;
+
+        $ref = 'master';
+        if ($explode_array[1] ?? false) {
+            $ref = $explode_array[1];
+        }
+
+        $explode_array = explode('/', $repo, 3);
+
+        [$user,$repo] = $explode_array;
+        $repo = $user.'/'.$repo;
+
+        $path = null;
+        if ($explode_array[2] ?? false) {
+            $path = '/'.$explode_array[2];
+        }
 
         \Log::info('this pipeline use actions', [
           'repo' => $repo,
+          'path' => $path,
           'ref' => $ref,
         ]);
 
@@ -352,7 +386,7 @@ class Pipeline
 
         // action.yml
         $action_yml = HttpClient::get(
-            'https://raw.githubusercontent.com/'.$repo.'/'.$ref.'/action.yml',
+            'https://raw.githubusercontent.com/'.$repo.'/'.$ref.$path.'/action.yml',
             null,
             [],
             20
@@ -362,7 +396,7 @@ class Pipeline
 
         $using = $action_yml['runs']['using'];
         $main = $action_yml['runs']['main'] ?? 'index.js';
-        $main = $workdir.'/'.$main;
+        $main = $workdir.$path.'/'.$main;
 
         if ('node' === substr($using, 0, 4)) {
             $using = 'node';
