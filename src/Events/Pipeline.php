@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace PCIT\Runner\Events;
 
-use Exception;
 use PCIT\Framework\Support\HttpClient;
 use PCIT\PCIT;
 use PCIT\Runner\BuildData;
@@ -43,7 +42,7 @@ class Pipeline
      * @param BuildData $build
      * @param Runner    $client
      *
-     * @throws Exception
+     * @throws \Exception
      */
     public function __construct($pipeline, ?BuildData $build, ?Runner $client, ?array $matrix_config)
     {
@@ -58,7 +57,7 @@ class Pipeline
     /**
      * @param $when
      *
-     * @throws Exception
+     * @throws \Exception
      */
     public function checkWhen($when): bool
     {
@@ -167,7 +166,7 @@ class Pipeline
     }
 
     /**
-     * @throws Exception
+     * @throws \Exception
      */
     public function handle(): void
     {
@@ -190,18 +189,17 @@ class Pipeline
         foreach ($this->pipeline as $step => $pipelineContent) {
             \Log::emergency('Handle pipeline', ['pipeline' => $step]);
 
-            $image = $pipelineContent->uses
-                ?? $pipelineContent->image
+            $image = $pipelineContent->image
                 ?? $this->client->image
                 ?? Image::get($language);
             $commands = $this->handleCommands($step, $pipelineContent);
-            $env = $pipelineContent->env ?? $pipelineContent->environment ?? [];
+            $env = $pipelineContent->env ?? [];
             $shell = $pipelineContent->shell ?? 'sh';
             $privileged = $pipelineContent->privileged ?? false;
             $pull = $pipelineContent->pull ?? false;
-            $settings = $pipelineContent->with ?? $pipelineContent->setting ?? $pipelineContent->settings ?? new \stdClass();
+            $settings = $pipelineContent->with ?? new \stdClass();
             $settings = (array) $settings;
-            $when = $pipelineContent->if ?? $pipelineContent->when ?? null;
+            $when = $pipelineContent->if ?? null;
 
             // 预处理 env
             $preEnv = $this->handleEnv($env);
