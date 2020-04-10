@@ -41,7 +41,7 @@ class Log
      */
     public static function drop(int $job_id): void
     {
-        \Log::emergency('Drop prev job '.$job_id.' logs', []);
+        \Log::emergency('🗑Drop prev job '.$job_id.' logs', []);
 
         \Cache::store()->del(CacheKey::logHashKey($job_id));
     }
@@ -140,7 +140,7 @@ class Log
                 $startedAt = $container_status_obj->StartedAt;
 
                 if (0 !== $exitCode) {
-                    \Log::error("Container $this->container_id ExitCode is $exitCode, not 0", []);
+                    \Log::error("🛑Container $this->container_id ExitCode is $exitCode, not 0", []);
 
                     throw new Exception(CI::GITHUB_CHECK_SUITE_CONCLUSION_FAILURE);
                 }
@@ -169,7 +169,7 @@ class Log
         $cache = $this->cache;
 
         $cache->hset(CacheKey::logHashKey($this->job_id), $this->step,
-        $container_log.PHP_EOL.substr($finishedAt, 0, 27).'00Z'.' ::exit-code::'.$exitCode
+        $container_log."\n".substr($finishedAt, 0, 20).'000000000Z'.' ::exit-code::'.$exitCode
         );
     }
 

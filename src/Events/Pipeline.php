@@ -8,7 +8,6 @@ use PCIT\PCIT;
 use PCIT\Runner\BuildData;
 use PCIT\Runner\CIDefault\Commands;
 use PCIT\Runner\CIDefault\Image;
-use PCIT\Runner\CIDefault\Status as CIDefaultStatus;
 use PCIT\Runner\Client as Runner;
 use PCIT\Runner\Conditional\Branch;
 use PCIT\Runner\Conditional\Event;
@@ -81,31 +80,31 @@ class Pipeline
         $when_matrix = $when->jobs ?? $when->matrix ?? null;
 
         if (!(new Platform($when_platform, 'linux/amd64'))->handle(true)) {
-            \Log::emergency('skip by platform check');
+            \Log::emergency('🛑skip by platform check');
 
             return true;
         }
 
         if (!(new Event($when_event, $this->build->event_type))->handle()) {
-            \Log::emergency('skip by event check');
+            \Log::emergency('🛑skip by event check');
 
             return true;
         }
 
         if (!(new Branch($when_branch, $this->build->branch))->handle(true)) {
-            \Log::emergency('skip by branch check');
+            \Log::emergency('🛑skip by branch check');
 
             return true;
         }
 
         if (!(new Tag($when_tag, $this->build->tag))->handle(true)) {
-            \Log::emergency('skip by tag check');
+            \Log::emergency('🛑skip by tag check');
 
             return true;
         }
 
         if (!(new Matrix($when_matrix, $this->matrix_config))->handle()) {
-            \Log::emergency('skip by matrix check');
+            \Log::emergency('🛑skip by matrix check');
 
             return true;
         }
@@ -192,7 +191,7 @@ class Pipeline
         }
 
         foreach ($this->pipeline as $step => $pipelineContent) {
-            \Log::emergency('Handle step', compact('step'));
+            \Log::emergency("🔄Handle step $step ...");
 
             $image = $pipelineContent->image
                 ?? $this->client->image
@@ -205,6 +204,7 @@ class Pipeline
             $settings = $pipelineContent->with ?? new \stdClass();
             $settings = (array) $settings;
             $when = $pipelineContent->if ?? null;
+            $read_only = $pipelineContent->read_only ?? false;
 
             // 预处理 env
             $preEnv = $this->handleEnv($env, $step);
@@ -219,8 +219,8 @@ class Pipeline
                 continue;
             }
 
-            // 根据 pipeline 获取默认的构建条件
-            $status = $when->status ?? CIDefaultStatus::get($step);
+            // 解析运行条件
+            $status = $when->status ?? null;
             $failure = (new Status($status, 'failure'))->handle();
             $success = (new Status($status, 'success'))->handle();
             $changed = (new Status($status, 'changed'))->handle();
@@ -237,7 +237,7 @@ class Pipeline
                     $commands = $actionHandler->handle($step, $image);
                     // 由于获取 action.yml 文件可能超时，捕获该错误
                 } catch (\Throwable $e) {
-                    \Log::emergency('handle pipeline use actions error'.$e->getMessage(), []);
+                    \Log::emergency('🛑handle pipeline use actions error'.$e->getMessage(), []);
 
                     continue;
                 }
@@ -288,6 +288,7 @@ class Pipeline
                         ],
                     ],
                 ])
+                ->setReadonlyRootfs($read_only)
                 ->setCreateJson(null)
                 ->getCreateJson();
 

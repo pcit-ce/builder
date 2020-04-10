@@ -67,6 +67,13 @@ class Git
     public function handle(): void
     {
         $git = $this->git;
+
+        if ($this->git->disable ?? false) {
+            \Log::emergency('🛑git clone disabled');
+
+            return;
+        }
+
         $client = $this->client;
         $build = $this->build;
 
@@ -124,9 +131,14 @@ class Git
 
         $config = $this->generateDocker($git_env, $git_image, $hosts, (int) $client->job_id, $client->workdir);
 
-        \Log::info('Handle clone git', json_decode($config, true));
+        $this->storeContainerConfig($config, (int) $client->job_id);
+    }
 
-        \Cache::store()->set(CacheKey::cloneKey($client->job_id), $config);
+    public function storeContainerConfig(string $config, int $job_id): void
+    {
+        \Log::info('📥Handle clone git', json_decode($config, true));
+
+        \Cache::store()->set(CacheKey::cloneKey($job_id), $config);
     }
 
     public function generateDocker(

@@ -55,18 +55,19 @@ class SystemEnv
         ];
 
         if ($this->build->pull_request_number) {
-            array_merge($system_env,
+            $system_env = array_merge($system_env,
                 [
                     'PCIT_PULL_REQUEST=true',
                     'PCIT_PULL_REQUEST_BRANCH='.$this->build->branch,
                     'PCIT_PULL_REQUEST_SHA='.$this->build->commit_id,
+                    'PCIT_PULL_REQUEST_INTERNAL='.$this->build->internal,
                 ]
             );
         }
 
         $system_env = array_merge($system_env, $this->client->system_env);
 
-        \Log::emergency(json_encode($system_env), []);
+        \Log::emergency('📐generate system env', $system_env);
 
         $this->env = $system_env;
 
