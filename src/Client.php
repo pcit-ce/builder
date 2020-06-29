@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace PCIT\Runner;
 
 use App\Job;
+use App\Notifications\GitHubChecksConclusion\Queued;
 use Exception;
 use PCIT\Framework\Support\Subject;
 use PCIT\Runner\Events\Cache;
@@ -16,6 +17,10 @@ use PCIT\Runner\Events\Services;
 use PCIT\Support\CacheKey;
 use PCIT\Support\CI;
 
+/**
+ * 1. 由 build 生成 job
+ * 2. 重新生成一个 job.
+ */
 class Client
 {
     /**
@@ -35,12 +40,18 @@ class Client
 
     public $pipeline;
 
+    /**
+     * @var string
+     */
     public $workdir;
 
     public $job_id;
 
     public $build_id;
 
+    /**
+     * @var string
+     */
     public $language;
 
     public $git;
@@ -198,6 +209,8 @@ class Client
 
         Job::updateEnv($job_id, json_encode($matrix_config));
 
+        $this->changeJobToQueued();
+
         $build_key_id = (int) $this->build->build_key_id;
 
         $gitType = $this->build->git_type;
@@ -228,5 +241,13 @@ class Client
             ->handle();
 
         \Log::emergency('===== Generate Job Success =====', ['job_id' => $this->job_id]);
+    }
+
+    public function changeJobToQueued(): void
+    {
+        (new Queued($this->job_id, $this->build->config, null, $this->language, 'Linux', $this->build->git_type))
+        ->handle();
+
+        Job::updateBuildStatus($this->job_id, CI::GITHUB_CHECK_SUITE_STATUS_QUEUED);
     }
 }

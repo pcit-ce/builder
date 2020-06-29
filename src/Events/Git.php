@@ -7,7 +7,7 @@ namespace PCIT\Runner\Events;
 use App\GetAccessToken;
 use PCIT\PCIT;
 use PCIT\Runner\BuildData;
-use PCIT\Runner\Client;
+use PCIT\Runner\Client as JobGenerator;
 use PCIT\Runner\Events\Handler\EnvHandler;
 use PCIT\Runner\Events\Handler\TextHandler;
 use PCIT\Support\CacheKey;
@@ -20,13 +20,13 @@ class Git
 
     private $build;
 
-    private $client;
+    private $jobGenerator;
 
-    public function __construct($git, ?BuildData $build, ?Client $client)
+    public function __construct($git, ?BuildData $build, ?JobGenerator $jobGenerator)
     {
         $this->git = $git;
         $this->build = $build;
-        $this->client = $client;
+        $this->jobGenerator = $jobGenerator;
     }
 
     public function parseGit(): array
@@ -37,12 +37,12 @@ class Git
         $git = $this->git;
 
         $env = array_merge(
-            $this->client->system_env ?? [],
-            $this->client->system_job_env ?? []
+            $this->jobGenerator->system_env ?? [],
+            $this->jobGenerator->system_job_env ?? []
         );
 
         $hosts = $git->hosts ?? [];
-        $hosts = array_merge($hosts, $this->client->networks->hosts ?? []);
+        $hosts = array_merge($hosts, $this->jobGenerator->networks->hosts ?? []);
         $hosts = $textHandler->handleArray($hosts, $env);
 
         $git_image = $git->image ?? 'pcit/git';
@@ -75,7 +75,7 @@ class Git
             return;
         }
 
-        $client = $this->client;
+        $jobGenerator = $this->jobGenerator;
         $build = $this->build;
 
         $git_image = 'pcit/git';
@@ -99,10 +99,25 @@ class Git
         ['host' => $git_host ] = parse_url($git_url);
 
         // TODO 在运行容器时注入 token
-        $token = GetAccessToken::getGitHubAppAccessToken(null, $build->repo_full_name);
+        if ('github' === $build->git_type) {
+            $token = GetAccessToken::getGitHubAppAccessToken(null, $build->repo_full_name);
+        } else {
+            $token = GetAccessToken::byRepoFullName($build->repo_full_name, null, $build->git_type);
+        }
+
         if ('1' === $build->private) {
             $git_config[] = 'DRONE_NETRC_MACHINE='.$git_host;
             $git_config[] = 'DRONE_NETRC_USERNAME=pcit';
+            $git_config[] = 'DRONE_NETRC_PASSWORD='.$token;
+            if ('gitee' === $build->git_type) {
+                $git_config[] = 'DRONE_NETRC_USERNAME=oauth2';
+            }
+        }
+
+        if ('coding' === $build->git_type) {
+            $git_username = '';
+            $token = '';
+            $git_config[] = 'DRONE_NETRC_USERNAME='.$git_username;
             $git_config[] = 'DRONE_NETRC_PASSWORD='.$token;
         }
 
@@ -110,7 +125,7 @@ class Git
             case CI::BUILD_EVENT_PUSH:
                 $git_env = array_merge([
                     'DRONE_REMOTE_URL='.$git_url,
-                    'DRONE_WORKSPACE='.$client->workdir,
+                    'DRONE_WORKSPACE='.$jobGenerator->workdir,
                     'DRONE_BUILD_EVENT=push',
                     'DRONE_COMMIT_SHA='.$build->commit_id,
                     'DRONE_COMMIT_REF='.'refs/heads/'.$build->branch,
@@ -120,28 +135,28 @@ class Git
             case CI::BUILD_EVENT_PR:
                 $git_env = array_merge([
                     'DRONE_REMOTE_URL='.$git_url,
-                    'DRONE_WORKSPACE='.$client->workdir,
+                    'DRONE_WORKSPACE='.$jobGenerator->workdir,
                     'DRONE_BUILD_EVENT=pull_request',
                     'DRONE_COMMIT_SHA='.$build->commit_id,
-                    'DRONE_COMMIT_REF=refs/pull/'.$client->build->pull_request_number.'/head',
+                    'DRONE_COMMIT_REF=refs/pull/'.$jobGenerator->build->pull_request_number.'/head',
                 ], $git_config);
 
                 break;
             case  CI::BUILD_EVENT_TAG:
                 $git_env = array_merge([
                     'DRONE_REMOTE_URL='.$git_url,
-                    'DRONE_WORKSPACE='.$client->workdir,
+                    'DRONE_WORKSPACE='.$jobGenerator->workdir,
                     'DRONE_BUILD_EVENT=tag',
                     'DRONE_COMMIT_SHA='.$build->commit_id,
-                    'DRONE_COMMIT_REF=refs/tags/'.$client->build->tag,
+                    'DRONE_COMMIT_REF=refs/tags/'.$jobGenerator->build->tag,
                 ], $git_config);
 
                 break;
         }
 
-        $config = $this->generateDocker($git_env, $git_image, $hosts, (int) $client->job_id, $client->workdir);
+        $config = $this->generateDocker($git_env, $git_image, $hosts, (int) $jobGenerator->job_id, $jobGenerator->workdir);
 
-        $this->storeContainerConfig($config, (int) $client->job_id);
+        $this->storeContainerConfig($config, (int) $jobGenerator->job_id);
     }
 
     public function storeContainerConfig(string $config, int $job_id): void
