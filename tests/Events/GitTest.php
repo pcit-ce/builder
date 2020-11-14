@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace PCIT\Runner\Tests\Events;
 
 use JsonSchema\Constraints\BaseConstraint;
-use PCIT\Runner\Client as JobGenerator;
 use PCIT\Runner\Events\Git;
+use PCIT\Runner\JobGenerator;
 use Symfony\Component\Yaml\Yaml;
 use Tests\TestCase;
 
@@ -15,7 +15,7 @@ class GitTest extends TestCase
     public function test(): void
     {
         $git = BaseConstraint::arrayToObjectRecursive(
-            Yaml::parseFile(base_path().'.pcit/clone.yaml')['clone']['git']
+            Yaml::parseFile(base_path('.pcit/clone.yaml'))['clone']['git']
         );
 
         $VAR = 'value';

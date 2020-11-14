@@ -14,6 +14,7 @@ use PCIT\Log\Handler\OutputHandler;
 use PCIT\Log\Handler\WarningHandler;
 use PCIT\PCIT;
 use PCIT\Runner\Events\Handler\EnvHandler;
+use PCIT\Runner\RPC\Cache;
 use PCIT\Support\CacheKey;
 use PCIT\Support\CI;
 
@@ -25,32 +26,25 @@ class Log
 
     private $step;
 
-    private $cache;
-
     public function __construct(int $job_id, string $container_id, string $step = null)
     {
         $this->job_id = $job_id;
         $this->container_id = $container_id;
         $this->step = $step;
-        $this->cache = \Cache::store();
     }
 
     /**
      * @param $job_id
-     *
-     * @throws \Exception
      */
     public static function drop(int $job_id): void
     {
         \Log::emergency('🗑Drop prev job '.$job_id.' logs', []);
 
-        \Cache::store()->del(CacheKey::logHashKey($job_id));
+        Cache::del(CacheKey::logHashKey($job_id));
     }
 
     /**
      * @return array<array>
-     *
-     * @throws \Exception
      */
     public function handle(array $mask_value_array = []): array
     {
@@ -84,8 +78,13 @@ class Log
                 }
 
                 $container_log = $docker_container->logs(
-                    $this->container_id, false, true, true,
-                    $since_time, $until_time, true
+                    $this->container_id,
+                    false,
+                    true,
+                    true,
+                    $since_time,
+                    $until_time,
+                    true
                 );
 
                 // echo $container_log;
@@ -93,62 +92,68 @@ class Log
                 sleep(2);
 
                 continue;
-            } else {
-                // 容器停止，获取日志
-                $container_log = $docker_container->logs(
-                    $this->container_id, false, true, true, 0, 0, true
-                );
+            }
+            // $docker_container->kill($this->container_id);
+            // 容器停止，获取日志
+            $container_log = $docker_container->logs(
+                $this->container_id,
+                false,
+                true,
+                true,
+                0,
+                0,
+                true
+            );
 
-                if (!$container_log) {
-                    $container_log = '12345678 log not found!';
-                }
+            if (!$container_log) {
+                $container_log = '12345678 log not found!';
+            }
 
-                // 去掉非法字符
-                $container_log = $this->fmt($container_log);
+            // 去掉非法字符
+            $container_log = $this->fmt($container_log);
 
-                // env
-                [$container_log,$env] = (new LogEnvHandler())->handle($container_log, 31);
+            // env
+            [$container_log,$env] = (new LogEnvHandler())->handle($container_log, 31);
 
-                $env = (new EnvHandler())->obj2array($env);
+            $env = (new EnvHandler())->obj2array($env);
 
-                // path
+            // path
 
-                // output
-                [$container_log,$output] = (new OutputHandler())->handle($container_log, 31);
+            // output
+            [$container_log,$output] = (new OutputHandler())->handle($container_log, 31);
 
-                // debug
-                [$container_log,$debug_context] = (new DebugHandler())->handle($container_log, 31);
+            // debug
+            [$container_log,$debug_context] = (new DebugHandler())->handle($container_log, 31);
 
-                // warning
-                [$container_log,$warning_context] = (new WarningHandler())->handle($container_log, 31);
+            // warning
+            [$container_log,$warning_context] = (new WarningHandler())->handle($container_log, 31);
 
-                // error
-                [$container_log,$error_context] = (new ErrorHandler())->handle($container_log, 31);
+            // error
+            [$container_log,$error_context] = (new ErrorHandler())->handle($container_log, 31);
 
-                // mask
-                [$container_log,$hide_value ] = (new MaskHandler())
+            // mask
+            [$container_log,$hide_value ] = (new MaskHandler())
                 ->handle($container_log, 31, $mask_value_array);
 
-                $exitCode = $container_status_obj->ExitCode;
-                $finishedAt = $container_status_obj->FinishedAt;
+            $exitCode = $container_status_obj->ExitCode;
+            $finishedAt = $container_status_obj->FinishedAt;
 
-                // store log
-                $this->storeLog($container_log, $exitCode, $finishedAt);
+            // store log
+            $this->storeLog($container_log, $exitCode, $finishedAt);
 
-                /**
-                 * 2018-05-01T05:16:37.6722812Z
-                 * 0001-01-01T00:00:00Z.
-                 */
-                $startedAt = $container_status_obj->StartedAt;
+            /**
+             * 2018-05-01T05:16:37.6722812Z
+             * 0001-01-01T00:00:00Z.
+             */
+            $startedAt = $container_status_obj->StartedAt;
 
-                if (0 !== $exitCode) {
-                    \Log::error("🛑Container $this->container_id ExitCode is $exitCode, not 0", []);
+            if (0 !== $exitCode) {
+                \Log::error("🛑Container $this->container_id ExitCode is $exitCode, not 0", []);
 
-                    throw new Exception(CI::GITHUB_CHECK_SUITE_CONCLUSION_FAILURE);
-                }
-
-                break;
+                throw new Exception(CI::GITHUB_CHECK_SUITE_CONCLUSION_FAILURE);
             }
+
+            break;
         }
 
         return [
@@ -168,10 +173,10 @@ class Log
 
     public function storeLog(string $container_log, int $exitCode, string $finishedAt): void
     {
-        $cache = $this->cache;
-
-        $cache->hset(CacheKey::logHashKey($this->job_id), $this->step,
-        $container_log."\n".substr($finishedAt, 0, 20).'000000000Z'.' ::exit-code::'.$exitCode
+        Cache::hset(
+            CacheKey::logHashKey($this->job_id),
+            $this->step,
+            $container_log."\n".substr($finishedAt, 0, 20).'000000000Z'.' ::exit-code::'.$exitCode
         );
     }
 
@@ -189,8 +194,6 @@ class Log
 
         $log = implode("\n", $log);
 
-        $log = iconv('utf-8', 'utf-8//IGNORE', trim($log));
-
-        return $log;
+        return iconv('utf-8', 'utf-8//IGNORE', trim($log));
     }
 }

@@ -8,7 +8,6 @@ use PCIT\PCIT;
 use PCIT\Runner\BuildData;
 use PCIT\Runner\CIDefault\Commands;
 use PCIT\Runner\CIDefault\Image;
-use PCIT\Runner\Client as JobGenerator;
 use PCIT\Runner\Conditional\Branch;
 use PCIT\Runner\Conditional\Event;
 use PCIT\Runner\Conditional\Matrix;
@@ -20,6 +19,8 @@ use PCIT\Runner\Events\Handler\EnvHandler;
 use PCIT\Runner\Events\Handler\PluginHandler;
 use PCIT\Runner\Events\Handler\ShellHandler;
 use PCIT\Runner\Events\Handler\TextHandler;
+use PCIT\Runner\JobGenerator;
+use PCIT\Runner\RPC\Cache;
 use PCIT\Support\CacheKey;
 
 class Pipeline
@@ -37,8 +38,6 @@ class Pipeline
      */
     public $jobGenerator;
 
-    private $cache;
-
     private $language;
 
     private $pluginHandler;
@@ -49,9 +48,7 @@ class Pipeline
      * @param              $pipeline
      * @param BuildData    $build
      * @param JobGenerator $jobGenerator
-     * @param array|null   $matrix_config ['k'=>'v']
-     *
-     * @throws \Exception
+     * @param null|array   $matrix_config ['k'=>'v']
      */
     public function __construct($pipeline, ?BuildData $build, ?JobGenerator $jobGenerator, ?array $matrix_config)
     {
@@ -59,7 +56,6 @@ class Pipeline
         $this->matrix_config = $matrix_config;
         $this->build = $build;
         $this->jobGenerator = $jobGenerator;
-        $this->cache = \Cache::store();
         $this->pluginHandler = new PluginHandler();
     }
 
@@ -67,8 +63,6 @@ class Pipeline
      * @param $when
      *
      * @return bool true: skip
-     *
-     * @throws \Exception
      */
     public function checkWhen($when): bool
     {
@@ -129,10 +123,12 @@ class Pipeline
         ];
 
         $envHandler = new EnvHandler();
-        $pipelineEnv = $envHandler->handle($pipelineEnv, array_merge(
-            $step_system_env,
-            $this->jobGenerator->system_env,
-            $this->jobGenerator->system_job_env,
+        $pipelineEnv = $envHandler->handle(
+            $pipelineEnv,
+            array_merge(
+                $step_system_env,
+                $this->jobGenerator->system_env,
+                $this->jobGenerator->system_job_env,
             )
         );
 
@@ -171,9 +167,6 @@ class Pipeline
         return \is_string($commands) ? [$commands] : $commands;
     }
 
-    /**
-     * @throws \Exception
-     */
     public function handle(): void
     {
         /**
@@ -184,13 +177,14 @@ class Pipeline
         $jobId = $this->jobGenerator->job_id;
         $workdir = $this->jobGenerator->workdir;
         $this->language = $language = $this->jobGenerator->language ?? 'php';
-        $hosts = $this->jobGenerator->networks->hosts ?? [];
+        $hosts = $this->jobGenerator->hosts ?? [];
 
         // custome github.com hosts
         if (env('CI_GITHUB_HOST')) {
-            $hosts = array_merge($hosts,
-            ['github.com:'.env('CI_GITHUB_HOST')]
-           );
+            $hosts = array_merge(
+                $hosts,
+                ['github.com:'.env('CI_GITHUB_HOST')]
+            );
         }
 
         foreach ($this->pipeline as $step => $pipelineContent) {
@@ -208,6 +202,7 @@ class Pipeline
             $settings = (array) $settings;
             $when = $pipelineContent->if ?? null;
             $read_only = $pipelineContent->read_only ?? false;
+            $timeout = $pipelineContent->timeout ?? $this->jobGenerator->timeout ?? null;
 
             // 预处理 env
             $preEnv = $this->handleEnv($env, $step);
@@ -256,7 +251,7 @@ class Pipeline
             $env = array_merge(["CI_SCRIPT=$ci_script"], $preEnv);
             \Log::info(json_encode($env), []);
 
-            [$entrypoint,$cmd] = (new ShellHandler())->handle($shell, $commands);
+            [$entrypoint,$cmd] = (new ShellHandler())->handle($shell, $commands, $timeout);
 
             $container_config = $docker_container
                 ->setEnv($env)
@@ -303,40 +298,39 @@ class Pipeline
     {
     }
 
-    public function storeCache(int $jobId,
-    string $step,
-    string $container_config,
-    bool $failure = false,
-    bool $success = false,
-    bool $changed = false): void
-    {
-        $cache = $this->cache;
-
+    public function storeCache(
+        int $jobId,
+        string $step,
+        string $container_config,
+        bool $failure = false,
+        bool $success = false,
+        bool $changed = false
+    ): void {
         $is_status = false;
 
         if ($failure) {
             $is_status = true;
-            $cache->lpush(CacheKey::pipelineListKey($jobId, 'failure'), $step);
-            $cache->hset(CacheKey::pipelineHashKey($jobId, 'failure'), $step, $container_config);
+            Cache::lpush(CacheKey::pipelineListKey($jobId, 'failure'), $step);
+            Cache::hset(CacheKey::pipelineHashKey($jobId, 'failure'), $step, $container_config);
         }
 
         if ($success) {
             $is_status = true;
-            $cache->lpush(CacheKey::pipelineListKey($jobId, 'success'), $step);
-            $cache->hset(CacheKey::pipelineHashKey($jobId, 'success'), $step, $container_config);
+            Cache::lpush(CacheKey::pipelineListKey($jobId, 'success'), $step);
+            Cache::hset(CacheKey::pipelineHashKey($jobId, 'success'), $step, $container_config);
         }
 
         if ($changed) {
             $is_status = true;
-            $cache->lpush(CacheKey::pipelineListKey($jobId, 'changed'), $step);
-            $cache->hset(CacheKey::pipelineHashKey($jobId, 'changed'), $step, $container_config);
+            Cache::lpush(CacheKey::pipelineListKey($jobId, 'changed'), $step);
+            Cache::hset(CacheKey::pipelineHashKey($jobId, 'changed'), $step, $container_config);
         }
 
         if (true === $is_status) {
             return;
         }
 
-        $cache->lpush(CacheKey::pipelineListKey($jobId), $step);
-        $cache->hset(CacheKey::pipelineHashKey($jobId), $step, $container_config);
+        Cache::lpush(CacheKey::pipelineListKey($jobId), $step);
+        Cache::hset(CacheKey::pipelineHashKey($jobId), $step, $container_config);
     }
 }

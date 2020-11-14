@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace PCIT\Runner\Events;
 
 use PCIT\PCIT;
-use PCIT\Runner\Client as JobGenerator;
 use PCIT\Runner\Events\Handler\EnvHandler;
 use PCIT\Runner\Events\Handler\TextHandler;
+use PCIT\Runner\JobGenerator;
+use PCIT\Runner\RPC\Cache;
 use PCIT\Support\CacheKey;
 
 class Services
@@ -21,7 +22,8 @@ class Services
     private $jobGenerator;
 
     /**
-     * @param array|null $matrix_config ['k'=>'v']
+     * @param null|array $matrix_config ['k'=>'v']
+     * @param mixed      $service
      */
     public function __construct($service, int $job_id, JobGenerator $jobGenerator, ?array $matrix_config)
     {
@@ -33,8 +35,6 @@ class Services
 
     /**
      * 运行服务.
-     *
-     * @throws \Exception
      */
     public function handle(): void
     {
@@ -112,7 +112,7 @@ class Services
 
             \Log::info('🌐Handle service '.$service_name, json_decode($container_config, true));
 
-            \Cache::store()->hset(CacheKey::serviceHashKey($this->job_id), $service_name, $container_config);
+            Cache::hset(CacheKey::serviceHashKey($this->job_id), $service_name, $container_config);
         }
     }
 }

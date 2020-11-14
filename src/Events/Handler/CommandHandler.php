@@ -6,11 +6,6 @@ namespace PCIT\Runner\Events\Handler;
 
 class CommandHandler
 {
-    /**
-     * @return ?string
-     *
-     * @throws \Exception
-     */
     public static function parse(
         string $shell,
         string $step,
@@ -43,7 +38,7 @@ EOF;
                 $content .= self::prepend($command);
             }
         } else {
-            $content = $commands[0];
+            $content = implode("\n", $commands);
         }
 
         if ($raw) {
@@ -72,6 +67,7 @@ EOF;
             if ('\\' === substr($item, -1)) {
                 // $cmd .= $item;
                 $special_cmd .= trim($item, '\\');
+
                 continue;
             }
 

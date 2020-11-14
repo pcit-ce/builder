@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace PCIT\Runner;
 
-use App\Job;
+use App\Exceptions\ConfigException;
 use App\Notifications\GitHubChecksConclusion\Queued;
 use Exception;
+use PCIT\Config\Validator as PcitConfigValidator;
 use PCIT\Framework\Support\Subject;
 use PCIT\Runner\Events\Cache;
 use PCIT\Runner\Events\Git;
@@ -14,6 +15,7 @@ use PCIT\Runner\Events\Handler\TextHandler;
 use PCIT\Runner\Events\Matrix;
 use PCIT\Runner\Events\Pipeline;
 use PCIT\Runner\Events\Services;
+use PCIT\Runner\RPC\Job;
 use PCIT\Support\CacheKey;
 use PCIT\Support\CI;
 
@@ -21,7 +23,7 @@ use PCIT\Support\CI;
  * 1. 由 build 生成 job
  * 2. 重新生成一个 job.
  */
-class Client
+class JobGenerator
 {
     /**
      * @var BuildData
@@ -64,6 +66,10 @@ class Client
 
     public $networks;
 
+    public $hosts;
+
+    public $timeout;
+
     /**
      * @var TextHandler
      */
@@ -71,11 +77,12 @@ class Client
 
     /**
      * @param int $job_id 处理 job 重新构建
-     *
-     * @throws \Exception
      */
-    public function handle(BuildData $build, int $job_id = 0): void
+    public function handle(?BuildData $build, int $job_id = 0): void
     {
+        if (!$build) {
+            return;
+        }
         $this->textHandler = new TextHandler();
 
         $this->build = $build;
@@ -83,13 +90,15 @@ class Client
 
         $this->system_env = array_merge($this->system_env, $this->build->env);
 
-        \Log::emergency('⚙build property is ', [
-            'build_key_id' => $this->build->build_key_id,
-            'event_type' => $this->build->event_type,
-            'commit_id' => $this->build->commit_id,
-            'pull_request_id' => $this->build->pull_request_number,
-            'tag' => $this->build->tag,
-            'git_type' => $this->build->git_type, ]
+        \Log::emergency(
+            '⚙build property is ',
+            [
+                'build_key_id' => $this->build->build_key_id,
+                'event_type' => $this->build->event_type,
+                'commit_id' => $this->build->commit_id,
+                'pull_request_id' => $this->build->pull_request_number,
+                'tag' => $this->build->tag,
+                'git_type' => $this->build->git_type, ]
         );
 
         // 生成容器配置
@@ -98,8 +107,6 @@ class Client
 
     /**
      * 生成 config.
-     *
-     * @throws \Exception
      */
     private function config(int $job_id = 0): void
     {
@@ -110,6 +117,16 @@ class Client
         // 解析 .pcit.y(a)ml.
         $yaml_obj = json_decode($this->build->config);
 
+        // 验证
+        $result = (new PcitConfigValidator())->validate($yaml_obj);
+
+        if ([] !== $result) {
+            $e = new ConfigException(CI::CONFIG_MISCONFIGURED);
+            $e->build_key_id = $this->build_id;
+
+            throw $e;
+        }
+
         $this->language = $language = $yaml_obj->language ?? 'php';
         $this->git = $git = $yaml_obj->clone->git ?? null;
         $this->cache = $cache = $yaml_obj->cache ?? null;
@@ -119,16 +136,19 @@ class Client
         $matrix = $yaml_obj->jobs ?? $yaml_obj->matrix ?? null;
         $image = $yaml_obj->image ?? null;
         $this->networks = $networks = $yaml_obj->networks ?? null;
+        $this->hosts = $hosts = $yaml_obj->hosts ?? null;
+        $this->timeout = $yaml_obj->timeout ?? null;
 
-        if ($networks->hosts ?? null) {
-            $this->networks->hosts = $this->textHandler->handleArray(
-            $networks->hosts, $this->system_env
-        );
+        if ($hosts ?? null) {
+            $this->hosts = $this->textHandler->handleArray(
+                $hosts,
+                $this->system_env
+            );
         }
 
         $this->image = null === $image ? null : $this->textHandler->handle($image, $this->system_env);
 
-        \Log::info('💻.pcit.yml set network hosts: ', $this->networks->hosts ?? []);
+        \Log::info('💻.pcit.yml set hosts: ', $this->hosts ?? []);
         \Log::info('🐳.pcit.yml set default image: ', [$this->image]);
 
         //项目根目录
@@ -152,8 +172,6 @@ class Client
         if (!$matrix) {
             \Log::emergency('1️⃣This build only include one job');
 
-            $job_id = (int) (Job::getJobIDByBuildKeyID($this->build_id)[0] ?? 0);
-
             $this->handleJob($job_id, null);
 
             return;
@@ -171,12 +189,7 @@ class Client
 
         // 矩阵构建循环
         foreach ($matrix as $k => $matrix_config) {
-            // 用户点击重新构建 build，必须重新生成 job
-            // 获取已有的 job_id
-            $job_id = Job::getJobIDByBuildKeyIDAndEnv(
-                $this->build_id, json_encode($matrix_config));
-
-            $this->handleJob($job_id, $matrix_config);
+            $this->handleJob(0, $matrix_config);
         }
     }
 
@@ -194,9 +207,7 @@ class Client
     /**
      * 生成 job 缓存.
      *
-     * @param array|null $matrix_config ['k'=>'v','k2'=>'v2']
-     *
-     * @throws \Exception
+     * @param null|array $matrix_config ['k'=>'v','k2'=>'v2']
      */
     private function handleJob(int $job_id, ?array $matrix_config): void
     {
@@ -208,8 +219,6 @@ class Client
         CacheKey::flush($job_id);
 
         Job::updateEnv($job_id, json_encode($matrix_config));
-
-        $this->changeJobToQueued();
 
         $build_key_id = (int) $this->build->build_key_id;
 
@@ -233,20 +242,29 @@ class Client
             // pipeline
             ->register(new Pipeline($this->pipeline, $this->build, $this, $matrix_config))
             // cache
-            ->register(new Cache((int) $this->job_id, $build_key_id, $this->workdir, $gitType,
-                       $rid, $branch, $matrix_config, $this->cache,
+            ->register(new Cache(
+                (int) $this->job_id,
+                $build_key_id,
+                $this->workdir,
+                $gitType,
+                $rid,
+                $branch,
+                $matrix_config,
+                $this->cache,
                        // pull_request 事件不上传缓存
                        'pull_request' === $this->build->event_type
             ))
             ->handle();
 
         \Log::emergency('===== Generate Job Success =====', ['job_id' => $this->job_id]);
+
+        $this->changeJobToQueued();
     }
 
     public function changeJobToQueued(): void
     {
         (new Queued($this->job_id, $this->build->config, null, $this->language, 'Linux', $this->build->git_type))
-        ->handle();
+            ->handle();
 
         Job::updateBuildStatus($this->job_id, CI::GITHUB_CHECK_SUITE_STATUS_QUEUED);
     }

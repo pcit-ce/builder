@@ -16,9 +16,6 @@ class CacheTest extends TestCase
 
     public $cache;
 
-    /**
-     * @throws \Exception
-     */
     public function common(): void
     {
         $result = Yaml::parse($this->yaml);
@@ -29,18 +26,22 @@ class CacheTest extends TestCase
 
         $stub->method('getPrefix')->willReturn('gittype_rid_branch');
 
-        $cache = new Cache(1,
-            1, '', 'github', 1,
-            'master', ['PHP_VERSION' => '7.4.0'], json_decode($json)->cache);
+        $cache = new Cache(
+            1,
+            1,
+            '',
+            'github',
+            1,
+            'master',
+            ['PHP_VERSION' => '7.4.0'],
+            json_decode($json)->cache
+        );
 
         $cache->handle();
 
-        $this->cache = \Cache::store()->get(CacheKey::cacheKey(1));
+        $this->cache = \Cache::get(CacheKey::cacheKey(1));
     }
 
-    /**
-     * @throws \Exception
-     */
     public function test_single_array(): void
     {
         DB::close();
@@ -57,9 +58,6 @@ EOF;
         $this->assertEquals('INPUT_CACHE=dir', json_decode($this->cache)->Env[6]);
     }
 
-    /**
-     * @throws \Exception
-     */
     public function test_array(): void
     {
         DB::close();
@@ -77,9 +75,6 @@ EOF;
         $this->assertEquals('INPUT_CACHE=dir,dir2', json_decode($this->cache)->Env[6]);
     }
 
-    /**
-     * @throws \Exception
-     */
     public function test_string(): void
     {
         DB::close();

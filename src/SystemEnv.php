@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace PCIT\Runner;
 
-use PCIT\Runner\Client as JobGenerator;
-
 class SystemEnv
 {
     public $build;
@@ -23,9 +21,6 @@ class SystemEnv
         $this->jobGenerator = $jobGenerator;
     }
 
-    /**
-     * @throws \Exception
-     */
     public function handle()
     {
         $ci_host = env('CI_HOST');
@@ -57,7 +52,8 @@ class SystemEnv
         ];
 
         if ($this->build->pull_request_number) {
-            $system_env = array_merge($system_env,
+            $system_env = array_merge(
+                $system_env,
                 [
                     'PCIT_PULL_REQUEST=true',
                     'PCIT_PULL_REQUEST_BRANCH='.$this->build->branch,

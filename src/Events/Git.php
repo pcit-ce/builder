@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace PCIT\Runner\Events;
 
-use App\GetAccessToken;
+use PCIT\GPI\Support\Git as GitSupport;
 use PCIT\PCIT;
 use PCIT\Runner\BuildData;
-use PCIT\Runner\Client as JobGenerator;
 use PCIT\Runner\Events\Handler\EnvHandler;
 use PCIT\Runner\Events\Handler\TextHandler;
+use PCIT\Runner\JobGenerator;
+use PCIT\Runner\RPC\Cache;
 use PCIT\Support\CacheKey;
 use PCIT\Support\CI;
-use PCIT\Support\Git as GitSupport;
 
 class Git
 {
@@ -42,27 +42,25 @@ class Git
         );
 
         $hosts = $git->hosts ?? [];
-        $hosts = array_merge($hosts, $this->jobGenerator->networks->hosts ?? []);
+        $hosts = array_merge($hosts, $this->jobGenerator->hosts ?? []);
         $hosts = $textHandler->handleArray($hosts, $env);
 
         $git_image = $git->image ?? 'pcit/git';
         $git_image = $textHandler->handle($git_image, $env);
 
-        unset($git->image);
-        unset($git->hosts);
+        unset($git->image, $git->hosts);
 
         $git_config = $envHandler->handle(
             (array) $git,
             $env,
-            'PLUGIN', true
+            'PLUGIN',
+            true
         );
 
         return [$git_config, $git_image, $hosts];
     }
 
     /**
-     * @throws \Exception
-     *
      * @see https://github.com/drone-plugins/drone-git
      */
     public function handle(): void
@@ -90,39 +88,20 @@ class Git
         }
 
         if (env('CI_GITHUB_HOST')) {
-            $hosts = array_merge($hosts,
-            ['github.com:'.env('CI_GITHUB_HOST')]
-        );
+            $hosts = array_merge(
+                $hosts,
+                ['github.com:'.env('CI_GITHUB_HOST')]
+            );
         }
 
         $git_url = GitSupport::getUrl($build->git_type, $build->repo_full_name);
-        ['host' => $git_host ] = parse_url($git_url);
 
-        // TODO 在运行容器时注入 token
-        if ('github' === $build->git_type) {
-            $token = GetAccessToken::getGitHubAppAccessToken(null, $build->repo_full_name);
-        } else {
-            $token = GetAccessToken::byRepoFullName($build->repo_full_name, null, $build->git_type);
-        }
-
-        if ('1' === $build->private) {
-            $git_config[] = 'DRONE_NETRC_MACHINE='.$git_host;
-            $git_config[] = 'DRONE_NETRC_USERNAME=pcit';
-            $git_config[] = 'DRONE_NETRC_PASSWORD='.$token;
-            if ('gitee' === $build->git_type) {
-                $git_config[] = 'DRONE_NETRC_USERNAME=oauth2';
-            }
-        }
-
-        if ('coding' === $build->git_type) {
-            $git_username = '';
-            $token = '';
-            $git_config[] = 'DRONE_NETRC_USERNAME='.$git_username;
-            $git_config[] = 'DRONE_NETRC_PASSWORD='.$token;
+        if ($github_mirror = env('CI_GITHUB_MIRROR')) {
+            $git_url = str_replace('github.com', $github_mirror, $git_url);
         }
 
         switch ($build->event_type) {
-            case CI::BUILD_EVENT_PUSH:
+            case CI::BUILD_EVENT_PUSH || CI::BUILD_EVENT_REPOSITORY_DISPATCH:
                 $git_env = array_merge([
                     'DRONE_REMOTE_URL='.$git_url,
                     'DRONE_WORKSPACE='.$jobGenerator->workdir,
@@ -163,7 +142,7 @@ class Git
     {
         \Log::info('📥Handle clone git', json_decode($config, true));
 
-        \Cache::store()->set(CacheKey::cloneKey($job_id), $config);
+        Cache::set(CacheKey::cloneKey($job_id), $config);
     }
 
     public function generateDocker(
@@ -172,8 +151,8 @@ class Git
         ?array $hosts,
         int $job_id,
         string $workdir,
-        array $binds = []): string
-    {
+        array $binds = []
+    ): string {
         /**
          * @var \Docker\Container\Client
          */
@@ -183,19 +162,17 @@ class Git
             $binds = ["pcit_$job_id:$workdir"];
         }
 
-        $config = $docker_container
-        ->setEnv($git_env)
-        ->setLabels([
-            'com.khs1994.ci.git' => (string) $job_id,
-            'com.khs1994.ci' => (string) $job_id,
-        ])
-        ->setBinds($binds)
-        ->setExtraHosts($hosts ?? [])
-        ->setImage($git_image)
-        ->setWorkingDir($workdir)
-        ->setCreateJson(null)
-        ->getCreateJson();
-
-        return $config;
+        return $docker_container
+            ->setEnv($git_env)
+            ->setLabels([
+                'com.khs1994.ci.git' => (string) $job_id,
+                'com.khs1994.ci' => (string) $job_id,
+            ])
+            ->setBinds($binds)
+            ->setExtraHosts($hosts ?? [])
+            ->setImage($git_image)
+            ->setWorkingDir($workdir)
+            ->setCreateJson(null)
+            ->getCreateJson();
     }
 }

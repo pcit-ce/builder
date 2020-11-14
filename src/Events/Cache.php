@@ -7,6 +7,7 @@ namespace PCIT\Runner\Events;
 use Docker\Container\Client as DockerContainer;
 use PCIT\PCIT;
 use PCIT\Runner\Events\Handler\EnvHandler;
+use PCIT\Runner\RPC\Cache as CacheRPC;
 use PCIT\Support\CacheKey;
 
 class Cache
@@ -30,25 +31,26 @@ class Cache
     /**
      * 一个 job 一个缓存.
      *
-     * @var array|null
+     * @var null|array
      */
     public $matrix;
 
     /**
      * Cache constructor.
      *
-     * @param string|array $cacheConfig
+     * @param array|string $cacheConfig
      */
-    public function __construct(int $jobId,
-                                int $build_key_id,
-                                string $workdir,
-                                string $gitType,
-                                int $rid,
-                                string $branch,
-                                ?array $matrix,
-                                $cacheConfig = null,
-                                bool $disableUpload = false)
-    {
+    public function __construct(
+        int $jobId,
+        int $build_key_id,
+        string $workdir,
+        string $gitType,
+        int $rid,
+        string $branch,
+        ?array $matrix,
+        $cacheConfig = null,
+        bool $disableUpload = false
+    ) {
         $this->jobId = $jobId;
         $this->build_key_id = $build_key_id;
         $this->workdir = $workdir;
@@ -60,9 +62,6 @@ class Cache
         $this->disableUpload = $disableUpload;
     }
 
-    /**
-     * @throws \Exception
-     */
     public function getPrefix(): string
     {
         $matrix = $this->matrix ?? [];
@@ -71,14 +70,9 @@ class Cache
         $matrix = md5(json_encode($matrix));
 
         // {git_type}_{rid}_{branch}-{matrix}
-        $prefix = sprintf('%s/%s/%s/%s', $this->gitType, $this->rid, $this->branch, $matrix);
-
-        return $prefix;
+        return sprintf('%s/%s/%s/%s', $this->gitType, $this->rid, $this->branch, $matrix);
     }
 
-    /**
-     * @throws \Exception
-     */
     public function handle(): void
     {
         if (!$this->cache) {
@@ -115,8 +109,7 @@ class Cache
 
         \Log::info('🔽Handle cache downloader', json_decode($container_config, true));
 
-        \Cache::store()
-            ->set(CacheKey::cacheKey($this->jobId, 'download'), $container_config);
+        CacheRPC::set(CacheKey::cacheKey($this->jobId, 'download'), $container_config);
 
         array_pop($env);
 
@@ -128,8 +121,7 @@ class Cache
 
         \Log::info('🔼Handle cache uploader', json_decode($container_config, true));
 
-        \Cache::store()
-            ->set(CacheKey::cacheKey($this->jobId, 'upload'), $container_config);
+        CacheRPC::set(CacheKey::cacheKey($this->jobId, 'upload'), $container_config);
     }
 
     private function getContainerConfig(DockerContainer $dockerContainer, ?array $env): string

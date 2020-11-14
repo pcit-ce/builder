@@ -20,8 +20,6 @@ abstract class Kernel
      * @param bool $reg conditional is reg
      *
      * @return bool true 不跳过
-     *
-     * @throws \Exception
      */
     public function handle(bool $reg = false): bool
     {
@@ -51,9 +49,9 @@ abstract class Kernel
 
                 if (true === ($result ?? false)) {
                     return false;
-                } else {
-                    return true;
                 }
+
+                return true;
             }
 
             if ($include) {

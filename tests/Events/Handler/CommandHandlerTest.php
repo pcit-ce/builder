@@ -55,16 +55,13 @@ EOF;
         $this->assertEquals('aW1wb3J0IG9zCnByaW50KG9zLmVudmlyb25bJ1BBVEgnXSk=', $result);
     }
 
-    /**
-     * @throws \Exception
-     */
     public function test_command(): void
     {
         $command = CommandHandler::parse('sh', 'step', 'image', [
-          'pwd',
-          'composer install',
-          'vendor/bin/phpunit',
-      ]);
+            'pwd',
+            'composer install',
+            'vendor/bin/phpunit',
+        ]);
 
         $this->assertEquals(416, \strlen($command));
     }

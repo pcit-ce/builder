@@ -13,8 +13,6 @@ class EnvHandler
      * @param bool   $replace      replace '-' with '_' on key
      *
      * @return array ['k=v']
-     *
-     * @throws \Exception
      */
     public function handle($env_with_var, $env, string $prefix = '', bool $replace = false): array
     {
@@ -38,12 +36,13 @@ class EnvHandler
                     if ($k) {
                         // is obj
                         $value = json_encode($value);
-                        break;
-                    } else {
-                        // is array
-                        $value = $this->array2str($value);
+
                         break;
                     }
+                    // is array
+                    $value = $this->array2str($value);
+
+                    break;
                 }
             }
 
@@ -69,6 +68,8 @@ class EnvHandler
 
     /**
      * conver [a,b,c] to a,b,c.
+     *
+     * @param mixed $value
      */
     public function array2str($value): string
     {
